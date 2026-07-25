@@ -1,172 +1,165 @@
 # Wire trackpad-haptic into your agent hooks
 
-1. Install the binary (`make && make install` in this repo).
-2. Copy **everything below the horizontal line** into a coding agent on *this* Mac.
-3. Let the agent inspect your local configs and merge the hooks. Do not hand-edit JSON from memory.
+1. Install the binary: in this repo, run `make && make install`.
+2. Copy **everything below the line** into a coding agent on this Mac.
+3. If the agent has an interview mode (`/interview`, AskUserQuestion, or similar), let it interview you first. Do not hand-merge JSON.
 
 ---
 
-Wire [trackpad-haptic](https://github.com/sankalpsharmaa/trackpad-haptic) so my Force Touch trackpad buzzes when a coding-agent turn finishes on this machine.
+Wire [trackpad-haptic](https://github.com/sankalpsharmaa/trackpad-haptic) on this Mac so my Force Touch trackpad buzzes when a coding agent finishes a turn.
 
-You are setting this up on **my** Mac. Inspect real files. Merge carefully. Do not invent configs for tools I do not use.
+Inspect my real configs. Merge; do not replace. Do not invent hook files for tools I never use.
 
-## Success criteria
+## How to work with me
 
-- `trackpad-haptic` is installed and a manual `tap` is felt.
-- Every agent I actually use fires a haptic on turn-finished / Stop.
-- Existing hooks are preserved (append/merge only).
-- No double-buzz from two hooks calling the binary on the same stop.
-- You tell me exactly how to reload each tool and how to verify.
+**Interview before you edit.** If you have AskUserQuestion, `/interview`, or any structured multiple-choice tool, use it. Do not guess scope.
 
-## Phase 0 — binary
+Interview rules:
 
-1. Resolve the binary path (prefer the first that exists and is executable):
-   - `"$HOME/.local/bin/trackpad-haptic"`
-   - `command -v trackpad-haptic`
-   - build from this repo if missing: `make && make install`
-2. Smoke-test **before** editing configs:
+- Ask **exactly 3 questions per round**.
+- Each question: one sentence on why it matters, then concrete options, plus **Other / let me explain**.
+- After each round, restate what you learned in one line per answer, then continue.
+- Skip questions my files already answer (e.g. I already have a haptic wrapper).
+- When choices are settled, implement. Show diffs. Tell me how to reload and verify.
+
+If you have **no** interview tool, ask the same questions in chat as `1 / 2 / 3` choices and wait for answers before writing files.
+
+## Interview question map
+
+Work top to bottom. Drop any item already settled by inspection.
+
+### Round A — who and where
+
+1. **Which agents should buzz?**  
+   Why: only those tools get hook edits.  
+   Options: Cursor only · Claude Code only · Codex only · Cursor + Claude · all three I actually have configs for · Other
+
+2. **Global or project hooks?**  
+   Why: decides `~/.cursor` vs repo `.cursor`, and the Claude/Codex equivalents.  
+   Options: user-global only (every project) · this project only · match whatever I already use · Other
+
+3. **I already have a status/haptic wrapper — what should you do?**  
+   Why: avoids double taps. Search for `trackpad-haptic`, `haptic`, `agent-status` first; then ask if unsure.  
+   Options: reuse existing wrapper only · add raw `trackpad-haptic tap` on Stop · show me what you found and I’ll pick · Other
+
+### Round B — feel and timing
+
+4. **Buzz pattern on finish?**  
+   Why: sets the command args and hook timeout.  
+   Options: default triple tap (`tap`) · one strong click (`tap 2 1`) · one buzz (`tap 3 1`) · soft triple thud (`tap 15 3 300`) · Other
+
+5. **When several agents run at once?**  
+   Why: changes whether you need leases.  
+   Options: tap whenever *that* agent stops (simple) · tap only when the *last* busy agent goes idle (needs refcount) · I already have last-idle logic — keep it · Other
+
+6. **If last-idle and I have no wrapper yet?**  
+   Why: only ask if they chose last-idle.  
+   Options: smallest lease dir you can add · skip last-idle, use per-stop taps · Other
+
+### Round C — safety and finish
+
+7. **May you create a missing global hooks file?**  
+   Why: some people have no `~/.cursor/hooks.json` on purpose.  
+   Options: yes, create minimal file · no, only edit files that already exist · ask per tool · Other
+
+8. **Git?**  
+   Why: dotfiles repos are easy to commit by accident.  
+   Options: edit only, no commit · commit if the file is in a git repo · Other
+
+9. **Ready to implement from these answers?**  
+   Options: yes · one more thing (I’ll explain) · show the plan first, then wait
+
+After round C (or sooner if everything is clear), implement.
+
+## Implementation playbook
+
+Follow only after the interview (or after I paste answers).
+
+### Binary
+
+1. Resolve path, in order: `$HOME/.local/bin/trackpad-haptic` → `command -v trackpad-haptic` → `make && make install` in this repo.
+2. Feel-test before config edits:
 
    ```bash
-   /path/to/trackpad-haptic tap 2 1
+   /absolute/path/to/trackpad-haptic tap 2 1
    ```
 
-   I should feel one strong click. If stderr says no Force Touch actuator, stop and report — hooks cannot fix missing hardware.
-3. In every hook config, store an **absolute** path (expand `$HOME` to `/Users/...`). Hook runners often have a minimal `PATH` and will not see `~/.local/bin`.
-4. Default finish command:
+   If stderr reports no Force Touch actuator, stop. Hooks cannot fix that.
+3. In configs, use the **absolute** path. Hook runners often lack my interactive `PATH`.
+4. Hook `timeout`: at least **5** seconds; prefer **8** for the default 3×400 ms taps.
 
-   ```bash
-   /Users/<me>/.local/bin/trackpad-haptic tap
-   ```
+### Discover
 
-   That is waveform `6`, count `3`, interval `400` ms (~1.2s of buzzing). Set hook `timeout` to **at least 5** (prefer **8**) seconds so the process is not killed mid-tap.
+Read before writing:
 
-## Phase 1 — discover what I use
-
-Check which of these exist **before** writing anything:
-
-| Tool | Config locations to read |
+| Tool | Look here |
 |-|-|
 | Cursor | `~/.cursor/hooks.json`, `<project>/.cursor/hooks.json` |
-| Claude Code | `~/.claude/settings.json`, `~/.claude/settings.local.json`, project `.claude/settings.json` / `settings.local.json` |
-| Codex | `~/.codex/hooks.json`, project `.codex/hooks.json`, plus `~/.codex/config.toml` if Codex stores hook trust/hashes there |
+| Claude Code | `~/.claude/settings.json`, `settings.local.json`, project `.claude/` copies |
+| Codex | `~/.codex/hooks.json`, project `.codex/hooks.json`, trust/hashes in `~/.codex/config.toml` |
 
-Also search my home / this repo for existing haptic wrappers, e.g. scripts whose names mention `haptic`, `trackpad`, `agent-status`, `agent-done`. If something already calls `trackpad-haptic` on stop, **reuse it** — do not add a second Stop hook that also taps.
+Search home and this machine for existing callers of `trackpad-haptic`. If a Stop/stop hook already buzzes, reuse that path.
 
-Ask me before creating a brand-new global hooks file for a tool that has **no** config and that I clearly do not run.
+### Merge rules
 
-## Phase 2 — wire each tool (merge only)
-
-### Shared rules
-
-- Read the full file first. Parse JSON. Append one new hook entry; never replace an entire `hooks` / event array.
-- Keep valid JSON (Cursor wants `"version": 1` at the top level when present).
-- Prefer a tiny shell wrapper only if the platform needs stdout JSON or argument folding — see below.
-- After edits, show me a unified diff of each file you changed.
+- Append one hook entry. Never wipe an event array.
+- Keep valid JSON. Cursor: keep `"version": 1` when present.
+- Edit symlink targets (real files under a dotfiles repo), not the symlink path if the editor would refuse.
+- Show a unified diff per file.
+- No drive-by refactors. No commit/push unless I said so in the interview.
 
 ### Cursor
 
-- Event: **`stop`** (turn finished). Docs: [Cursor hooks](https://cursor.com/docs/hooks).
-- File shape:
+- Event: `stop` ([docs](https://cursor.com/docs/hooks)).
+- Example entry:
 
   ```json
   {
-    "version": 1,
-    "hooks": {
-      "stop": [
-        {
-          "command": "/Users/<me>/.local/bin/trackpad-haptic tap",
-          "description": "Trackpad haptic when the agent finishes",
-          "timeout": 8
-        }
-      ]
-    }
+    "command": "/Users/<me>/.local/bin/trackpad-haptic tap",
+    "description": "Trackpad haptic when the agent finishes",
+    "timeout": 8
   }
   ```
 
-- Merge into the existing `hooks.stop` array if it already exists.
-- Cursor may send JSON on stdin and expect JSON on stdout. A bare `trackpad-haptic` ignores stdin and prints nothing — that is usually fine (`{}` / empty). If Cursor’s Hooks output panel shows failures about invalid JSON / exit codes, wrap:
+- User-global and project hooks can both run — wire one place only.
+- If Output → Hooks complains about stdout JSON, wrap:
 
   ```bash
-  # ~/.local/bin/trackpad-haptic-cursor-stop
   #!/bin/zsh
   /Users/<me>/.local/bin/trackpad-haptic tap
   print -r -- '{}'
   ```
 
-  `chmod +x` it and point `command` at that wrapper instead.
-- User-global and project hooks can **both** run. Do not add the same tap in both places.
-- Reload: quit/reopen Cursor, or otherwise reload hooks; check **View → Output → Hooks** if it does not fire.
+- Reload: restart Cursor; debug via **View → Output → Hooks**.
 
 ### Claude Code
 
-- Event: **`Stop`** (PascalCase — not Cursor’s `stop`).
-- Typical location: `~/.claude/settings.json` under `hooks.Stop`.
-- Shape (command hook):
-
-  ```json
-  {
-    "hooks": {
-      "Stop": [
-        {
-          "matcher": "",
-          "hooks": [
-            {
-              "type": "command",
-              "command": "/Users/<me>/.local/bin/trackpad-haptic tap",
-              "timeout": 8
-            }
-          ]
-        }
-      ]
-    }
-  }
-  ```
-
-- Merge into existing `Stop` entries; do not delete `PreToolUse` / `UserPromptSubmit` / permission hooks.
-- If settings are symlinked into a git-managed dotfiles repo, edit the **real** file (some editors refuse writes through symlinks).
-- After changing hook scripts or commands, Claude Code often needs **`/hooks`** or a full restart so the new command is trusted/loaded. Say so explicitly.
-- Known footgun: editing a hook script mid-session can drop UserPromptSubmit until reload — warn me if you touch live hook scripts.
+- Event: `Stop` (PascalCase).
+- Command hook under `hooks.Stop` with `"type": "command"`, absolute command, `timeout` 8.
+- Preserve `PreToolUse`, `UserPromptSubmit`, permissions, etc.
+- Reload: `/hooks` or restart. Warn me if you edit a live hook script (UPS can drop until reload).
 
 ### Codex
 
-- Event: **`Stop`** (same family as Claude Code).
-- File: `~/.codex/hooks.json` (or project `.codex/hooks.json`).
-- Shape is usually the Claude-like `type: command` list under `hooks.Stop`.
-- Codex may require **trusting** new hook command strings (hashes in `~/.codex/config.toml` or a first-run prompt). After adding the command, check whether trust must be updated; do not leave me with a silently skipped hook.
-- Reload: restart Codex / re-approve the hook if prompted.
+- Event: `Stop`, same command-hook shape as Claude Code.
+- Update trust/hashes if Codex requires them for new command strings; a skipped untrusted hook looks like “not wired.”
+- Reload: restart Codex / approve trust prompts.
 
-## Phase 3 — multi-agent behavior
+### Multi-agent
 
-Default: **tap on every Stop** for that tool. Fine when one agent finishes while another is still working.
+- **Per-stop** (default from interview): each tool’s Stop calls `trackpad-haptic` with the chosen args.
+- **Last-idle**: only if I chose it — reuse my wrapper, or add the smallest lease acquire/release and tap at zero.
+- Never double-fire wrapper + raw `tap` on the same Stop.
 
-Only if I already have a shared lease/refcount “agent status” wrapper:
+### Verify
 
-- Do **not** add a raw second `trackpad-haptic` Stop hook.
-- Ensure that wrapper’s idle/done path calls the absolute `trackpad-haptic` path.
-- Optionally keep busy-start hooks (`beforeSubmitPrompt` / `UserPromptSubmit` / `PreToolUse`) as they are — this prompt is about the finish buzz.
+Report pass/fail:
 
-If I ask for last-idle-only and I have no wrapper yet, implement the smallest possible lease dir (acquire on start, release on stop, tap only when count hits zero). Do not build that unless I ask.
+1. Manual feel: `tap 2 1`.
+2. Clean env: `env -i HOME="$HOME" USER="$USER" /absolute/path/trackpad-haptic tap 2 1`
+3. JSON still parses.
+4. `rg -n 'trackpad-haptic' ~/.cursor ~/.claude ~/.codex` (plus project paths you touched) — expected entries, no duplicates.
+5. One short live turn per wired tool → buzz at the end.
+6. On failure: read that tool’s hook log / trust errors and fix.
 
-## Phase 4 — verify
-
-Run through this checklist and report pass/fail:
-
-1. Manual: `trackpad-haptic tap 2 1` → felt.
-2. Manual absolute path from a clean env:
-
-   ```bash
-   env -i HOME="$HOME" USER="$USER" /Users/<me>/.local/bin/trackpad-haptic tap 2 1
-   ```
-
-3. Config: `jq`/Python parse of each edited JSON file succeeds.
-4. `rg -n 'trackpad-haptic' ~/.cursor ~/.claude ~/.codex` (and project copies you edited) shows the expected Stop/stop entries and **no accidental duplicates**.
-5. Live: one short agent turn in each wired tool → taps at the end.
-6. If live turn fails: paste/read the tool’s hook log / Output → Hooks / Codex trust errors and fix.
-
-## Constraints
-
-- macOS + Force Touch only.
-- Minimal diff. No drive-by refactors of my hook system.
-- No committing or pushing unless I ask.
-- Prefer user-global hooks for “always on every project,” project hooks only if that is already how I organize things.
-- If anything is ambiguous (two Claude settings files, symlink farms, conflicting wrappers), stop and ask rather than guessing.
+End with: what changed, how to reload each tool, and what I should feel on the next finished turn.
