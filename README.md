@@ -1,16 +1,14 @@
 # trackpad-haptic
 
-Your trackpad buzzes when an agent finishes — so you don’t have to stare at the screen.
+When an agent finishes, my trackpad taps me. I don't have to watch the window.
 
-## Why
+## Why I built this
 
-I run several coding agents at once (Cursor, Claude Code, Codex, …). Tabs pile up. I look away, come back, and have no idea which ones are still thinking and which are waiting on me.
+I keep several coding agents running at once: Cursor, Claude Code, Codex. Each one sits in its own tab. If I look away for a few minutes, I lose the plot. Which ones are still thinking? Which ones are stuck waiting on me?
 
-Sound notifications get ignored. Dock badges get ignored. What actually works: a physical tap under my fingers. When the last busy agent goes idle, the trackpad buzzes. I can keep reading a paper or writing elsewhere and still know something needs my attention.
+I tried the usual signals first. Notification sounds disappear into a laptop day. Dock badges sit unread until I happen to glance at them. The cue I don't miss is a Force Touch pulse under my fingers. When the last busy agent goes idle, three taps hit the trackpad. I can stay in a paper or another editor and still know something needs a reply.
 
-That’s it. A tiny CLI that fires Force Touch haptics so “agent done” is something you *feel*.
-
-Wire it into whatever hooks / scripts you already use when a turn ends. Example: three strong taps when work finishes.
+This repo is that cue as a one-line command. Hook it from whatever runs at the end of a turn:
 
 ```bash
 trackpad-haptic tap
@@ -18,19 +16,19 @@ trackpad-haptic tap
 
 ## Install
 
-macOS with a Force Touch trackpad (MacBook or Magic Trackpad). Needs Xcode Command Line Tools.
+Needs macOS with a Force Touch trackpad (MacBook or Magic Trackpad) and Xcode Command Line Tools. MIT licensed.
 
 ```bash
 git clone https://github.com/sankalpsharmaa/trackpad-haptic.git
 cd trackpad-haptic
-make && make install   # installs to ~/.local/bin
+make && make install   # → ~/.local/bin/trackpad-haptic
 ```
 
-Put `~/.local/bin` on your `PATH`, then try:
+Add `~/.local/bin` to your `PATH`, then try a single click or the default triple tap:
 
 ```bash
-trackpad-haptic tap        # 3 taps (default)
 trackpad-haptic tap 2 1    # one strong click
+trackpad-haptic tap        # three strong taps, 400 ms apart
 trackpad-haptic tap 3 1    # one buzz
 ```
 
@@ -42,10 +40,4 @@ trackpad-haptic tap [waveform] [count] [interval_ms]
 
 Defaults: waveform `6` (strong tap), count `3`, interval `400` ms.
 
-Handy waveforms to try: `1` weak · `2` strong click · `3` buzz · `6` strong tap · `15` soft thud · `16` strong thud.
-
-## Notes
-
-- Uses Apple’s private trackpad haptic APIs — fine for personal tooling, can break on OS updates.
-- No Force Touch hardware → it just errors out politely.
-- MIT licensed.
+Waveforms worth trying: `1` weak, `2` strong click, `3` buzz, `6` strong tap, `15` soft thud, `16` strong thud. Apple does not document these IDs; they can change with macOS updates. If your machine has no Force Touch actuator, the command exits with an error.
