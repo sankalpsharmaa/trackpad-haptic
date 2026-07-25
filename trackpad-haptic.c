@@ -1,3 +1,20 @@
+/*
+ * trackpad-haptic — Force Touch trackpad pulses from the CLI.
+ *
+ * Apple never shipped a public haptic API for the trackpad. The same private
+ * MultitouchSupport calls that drive click feedback work from userland if you
+ * dlopen the framework and poke the right symbols. Those symbols are
+ * undocumented and can move or vanish on a macOS update.
+ *
+ * I use this from agent stop-hooks (Cursor / Claude Code / Codex): when the
+ * last busy agent goes idle, three taps hit the pad so I notice without
+ * staring at tabs.
+ *
+ *   clang -O2 -o trackpad-haptic trackpad-haptic.c \
+ *       -framework CoreFoundation -framework IOKit
+ *   trackpad-haptic tap [waveform] [count] [interval_ms]
+ */
+
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/IOReturn.h>
 
@@ -8,18 +25,32 @@
 #include <string.h>
 #include <unistd.h>
 
+/* Not on the public SDK link line — load by path at runtime. */
 #define MT_FW                                                              \
     "/System/Library/PrivateFrameworks/MultitouchSupport.framework/" \
     "MultitouchSupport"
+
+/*
+ * MTDevice is an opaque C++-ish object. Community reverse engineering (and
+ * testing on Apple Silicon) puts the uint64_t actuator device id at +64.
+ * If create/open start failing after an OS update, this offset is the first
+ * thing to re-check.
+ */
 #define MTDEVICE_ID_OFFSET 64
 
+/*
+ * Private MultitouchSupport entry points (signatures from reverse engineering).
+ *
+ * Lifecycle for one pulse:
+ *   create(device_id) → open → actuate(waveform, …) → close → CFRelease
+ *
+ * MTActuatorActuate's last three args are intensity-ish parameters. Some
+ * writeups pass floats; on this machine float args made pulses feel weak,
+ * while three zero uint32_t args match a solid system click. Leave them 0.
+ */
 typedef CFTypeRef (*MTActuatorCreateFromDeviceID_t)(uint64_t);
 typedef IOReturn (*MTActuatorOpen_t)(CFTypeRef, uint32_t);
 typedef IOReturn (*MTActuatorClose_t)(CFTypeRef);
-/*
- * Keep the integer trailing args. Passing floats here made pulses feel weaker
- * on this machine than the all-zero integer call that originally felt strong.
- */
 typedef IOReturn (*MTActuatorActuate_t)(CFTypeRef, int32_t, uint32_t, uint32_t,
                                         uint32_t);
 typedef CFMutableArrayRef (*MTDeviceCreateList_t)(void);
@@ -38,6 +69,7 @@ static int load_symbols(MTActuatorCreateFromDeviceID_t *create,
         return 1;
     }
 
+    /* Intentionally leak `lib` for process lifetime — one-shot CLI. */
     *create = dlsym(lib, "MTActuatorCreateFromDeviceID");
     *open = dlsym(lib, "MTActuatorOpen");
     *close = dlsym(lib, "MTActuatorClose");
@@ -51,6 +83,13 @@ static int load_symbols(MTActuatorCreateFromDeviceID_t *create,
     return 0;
 }
 
+/*
+ * Return the first multitouch device whose haptic actuator opens.
+ *
+ * MTDeviceCreateList includes things that are not Force Touch pads (e.g. older
+ * external mice / touch surfaces). create() may succeed for junk ids; open()
+ * is the real filter. First success wins — usually the built-in trackpad.
+ */
 static uint64_t find_actuator_device_id(MTActuatorCreateFromDeviceID_t create,
                                         MTActuatorOpen_t open,
                                         MTActuatorClose_t close,
@@ -91,7 +130,10 @@ static int pulse_once(MTActuatorCreateFromDeviceID_t create,
                       MTActuatorOpen_t open, MTActuatorClose_t close,
                       MTActuatorActuate_t actuate, uint64_t device_id,
                       int32_t waveform) {
-    /* Actuator handles are single-shot; recreate for every pulse. */
+    /*
+     * Reusing one actuator across pulses often no-ops or weakens later taps.
+     * Treat the handle as single-shot: fresh create/open per pulse.
+     */
     CFTypeRef actuator = create(device_id);
     if (actuator == NULL) {
         fprintf(stderr, "MTActuatorCreateFromDeviceID failed\n");
@@ -128,9 +170,14 @@ int main(int argc, char **argv) {
         return 2;
     }
 
-    int32_t waveform = 6;
+    /*
+     * Waveform ids are Apple-internal enums, not a public table. Values below
+     * were felt out on an M-series MacBook; YMMV. Defaults = "agent done"
+     * triple-tap that cuts through without sounding like a system alert.
+     */
+    int32_t waveform = 6;          /* strong tap */
     unsigned long count = 3;
-    unsigned long interval = 400;
+    unsigned long interval = 400;  /* ms between pulses */
 
     if (argc >= 3) {
         char *end = NULL;
