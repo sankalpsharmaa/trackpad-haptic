@@ -1,14 +1,14 @@
 # Wire trackpad-haptic into your agent hooks
 
-1. Install the binary: in this repo, run `make && make install`.
-2. Copy **everything below the line** into a coding agent on this Mac.
-3. If the agent has an interview mode (`/interview`, AskUserQuestion, or similar), let it interview you first. Do not hand-merge JSON.
+1. Open this repo in a coding agent on your Mac (or paste [HOOKS.md](HOOKS.md) from GitHub).
+2. Copy **everything below the line** into that agent.
+3. Answer the interview questions. The agent installs the binary and wires your hooks — you should not run `make` or edit JSON yourself.
 
 ---
 
 Wire [trackpad-haptic](https://github.com/sankalpsharmaa/trackpad-haptic) on this Mac so my Force Touch trackpad buzzes when a coding agent finishes a turn.
 
-Inspect my real configs. Merge; do not replace. Do not invent hook files for tools I never use.
+You own install **and** hooks. Clone/build/install the binary if needed, then merge stop hooks into my real configs. Do not replace hook arrays. Do not invent files for tools I never use. Do not ask me to run `make` or hand-edit JSON unless something is blocked (permissions, missing Xcode CLT, no Force Touch).
 
 ## How to work with me
 
@@ -77,7 +77,7 @@ Follow only after the interview (or after I paste answers).
 
 ### Binary
 
-1. Resolve path, in order: `$HOME/.local/bin/trackpad-haptic` → `command -v trackpad-haptic` → `make && make install` in this repo.
+1. Resolve path, in order: `$HOME/.local/bin/trackpad-haptic` → `command -v trackpad-haptic` → build from this repo with `make && make install` (you run this; do not make me run it).
 2. Feel-test before config edits:
 
    ```bash
